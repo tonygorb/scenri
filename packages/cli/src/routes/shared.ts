@@ -33,8 +33,15 @@ export const assetHash = (ref: unknown): string | null => {
 export const LOGO_ROLES = ['primary', 'mark', 'wordmark', 'monochrome', 'alternate'] as const;
 export const LOGO_BACKGROUNDS = ['light', 'dark', 'any'] as const;
 
-/** Normalize an uploaded product shot: whatever arrived, store a PNG. */
-export const toPng = (buf: Buffer): Promise<Buffer> => sharp(buf).png().toBuffer();
+/**
+ * Normalize an uploaded product shot: whatever arrived, store a PNG.
+ *
+ * `.rotate()` takes no argument on purpose. That form applies the EXIF
+ * orientation tag, and it has to run before `.png()`, which drops the tag: a
+ * shot taken in portrait on a phone otherwise stores in its sensor orientation
+ * and lies on its side permanently, with nothing downstream able to recover it.
+ */
+export const toPng = (buf: Buffer): Promise<Buffer> => sharp(buf).rotate().png().toBuffer();
 
 /** One standard image, for asking an engine what it charges. */
 export const COST_PROBE = {
@@ -56,6 +63,7 @@ export const COST_PROBE = {
 export const MARK_MAX_EDGE = 2048;
 export const toMarkPng = (buf: Buffer): Promise<Buffer> =>
   sharp(buf, { density: 384 })
+    .rotate()
     .resize({ width: MARK_MAX_EDGE, height: MARK_MAX_EDGE, fit: 'inside', withoutEnlargement: true })
     .png()
     .toBuffer();

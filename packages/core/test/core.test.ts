@@ -167,16 +167,21 @@ describe('version tree', () => {
     core.store.setArchived(n.id, true);
     let after = core.store.getNode(n.id)!;
     expect(after.archived).toBe(true);
-    // archiving is a put-away, not a delete: the row, its status and its
-    // keeper flag are all untouched
+    // archiving is a put-away, not a delete: the row and its status survive
     expect(after.status).toBe('done');
-    expect(after.kept).toBe(true);
     expect(core.store.treeFor(project.id).map((row) => row.id)).toContain(n.id);
+    // but it does clear the keeper mark. Keepers is a live shortlist and the
+    // lens reads the live list, so an archived keeper used to leave Keepers and
+    // its count while still wearing a lit star: two flags saying opposite
+    // things about the same shot.
+    expect(after.kept).toBe(false);
 
+    // Restoring puts the shot back without re-starring it. The judgement was
+    // made once; putting it back on the shelf is not making it again.
     core.store.setArchived(n.id, false);
     after = core.store.getNode(n.id)!;
     expect(after.archived).toBe(false);
-    expect(after.kept).toBe(true);
+    expect(after.kept).toBe(false);
   });
 
   it('deleteNode permanently removes a leaf node', () => {

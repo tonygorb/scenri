@@ -122,25 +122,64 @@
   border-color: transparent;
 }
 
-/* honest in-flight: gold shimmer + elapsed, never a fake percent */
+/* honest in-flight: gold shimmer + elapsed, never a fake percent.
+
+   Two layers, because one linear sweep at one speed reads as a loading GIF:
+   a slow breath under a passing highlight, the way light actually moves across
+   a surface. The sweep eases in and out rather than running at constant speed,
+   and its period is a variable so a 40px notification thumb and a full stage
+   do not both take 1.6 seconds to cross: the same sweep speed over a much
+   wider box is what made the large placeholders feel sluggish. */
 .sc-shimmer {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    100deg,
-    transparent 30%,
-    color-mix(in srgb, var(--sc-gold) 14%, transparent) 50%,
-    transparent 70%
-  );
-  background-size: 220% 100%;
-  animation: sc-shimmer 1.6s linear infinite;
+  --sc-shimmer-dur: 1.9s;
+  background:
+    linear-gradient(
+      100deg,
+      transparent 26%,
+      color-mix(in srgb, var(--sc-gold) 15%, transparent) 47%,
+      color-mix(in srgb, var(--sc-gold) 7%, transparent) 58%,
+      transparent 74%
+    ),
+    radial-gradient(120% 90% at 50% 40%, color-mix(in srgb, var(--sc-gold) 5%, transparent), transparent 70%);
+  background-size:
+    220% 100%,
+    100% 100%;
+  background-repeat: no-repeat;
+  animation:
+    sc-shimmer var(--sc-shimmer-dur) cubic-bezier(0.45, 0, 0.3, 1) infinite,
+    sc-shimmer-breathe calc(var(--sc-shimmer-dur) * 2.2) ease-in-out infinite;
+}
+/* Small hosts get a quicker pass, large ones a slower one, so the highlight
+   travels at roughly one speed across every surface in the app. */
+.sc-notif-thumb .sc-shimmer,
+.sc-fr .sc-shimmer,
+.sc-target-thumb.sc-shimmer {
+  --sc-shimmer-dur: 1.15s;
+}
+.sc-stage-wait .sc-shimmer {
+  --sc-shimmer-dur: 2.9s;
 }
 @keyframes sc-shimmer {
   from {
-    background-position: 180% 0;
+    background-position:
+      180% 0,
+      0 0;
   }
   to {
-    background-position: -80% 0;
+    background-position:
+      -80% 0,
+      0 0;
+  }
+}
+@keyframes sc-shimmer-breathe {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
   }
 }
 @media (prefers-reduced-motion: reduce) {

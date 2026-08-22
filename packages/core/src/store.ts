@@ -372,8 +372,20 @@ export function createStore(db: DB) {
     setKept(id: string, kept: boolean): void {
       db.prepare('UPDATE nodes SET kept=? WHERE id=?').run(kept ? 1 : 0, id);
     },
+    /**
+     * Archiving also clears the keeper mark.
+     *
+     * The two flags were independent, and the Keepers lens reads the live list,
+     * so archiving a keeper removed it from Keepers and from the Keepers count
+     * without saying anything: the star stayed lit on a shot that was no longer
+     * in the shortlist it claimed to be in. Keepers is a live shortlist and
+     * archive means put away, so one clears the other and the two can never
+     * disagree. Restoring does not re-star: the judgement was made once and
+     * putting the shot back is not the same as making it again.
+     */
     setArchived(id: string, archived: boolean): void {
-      db.prepare('UPDATE nodes SET archived=? WHERE id=?').run(archived ? 1 : 0, id);
+      if (archived) db.prepare('UPDATE nodes SET archived=1, kept=0 WHERE id=?').run(id);
+      else db.prepare('UPDATE nodes SET archived=0 WHERE id=?').run(id);
     },
     /** Permanent. Orphans any children rather than blocking or cascading —
      * same technique collapseProjects already uses for a surplus root. */

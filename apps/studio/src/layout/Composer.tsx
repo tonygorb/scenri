@@ -625,7 +625,15 @@ export const Composer = forwardRef<
     const shape = `Aspect ${f.label} ${f.hint}`;
     if (mode === 'edit') return shape;
     const r = RESOLUTIONS.find((x) => x.id === quality);
-    const size = sizingOf(engineId) === 'ratio' || !r ? null : `${r.label} ${r.edge} px`;
+    const sizing = sizingOf(engineId);
+    // Spoken aloud, "resolution High 1536 px" is a claim. On an engine that is
+    // only asked for a size it is a request, and the summary says which.
+    const size =
+      sizing === 'ratio' || !r
+        ? null
+        : sizing === 'advisory'
+          ? `${r.label}, asking for ${r.edge} px`
+          : `${r.label} ${r.edge} px`;
     return [shape, `${count} variants`, size && `resolution ${size}`].filter(Boolean).join(', ');
   }, [mode, formatId, count, quality, engineId]);
 

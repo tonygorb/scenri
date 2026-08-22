@@ -1,0 +1,22 @@
+/*
+ * The floor under every image in the app.
+ *
+ * A shot card, a filmstrip frame and a reference tile each impose a box on a
+ * picture, and each one is responsible for saying how that picture should fill
+ * it. When a rule forgets, the browser's own default is `fill`, which stretches
+ * the photograph to the box: the variants rail under the detail stage carried
+ * `width=52 height=52` and no `object-fit` for exactly that reason, and every
+ * portrait shot in it was widened by a quarter.
+ *
+ * `contain` is the honest default. It is identical to `fill` whenever the box
+ * already matches the picture's proportions, so nothing that declares its own
+ * `cover` or sizes to content is affected. What it changes is the failure mode:
+ * a box nobody wrote a rule for now letterboxes instead of lying about the
+ * shape of the thing inside it.
+ *
+ * This is the first import in the manifest, and an element selector, so any
+ * class rule anywhere beats it. It is a floor, never a decision.
+ */
+img {
+  object-fit: contain;
+}

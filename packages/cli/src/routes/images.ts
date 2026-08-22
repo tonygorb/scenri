@@ -21,7 +21,12 @@ export function registerImageRoutes(app: FastifyInstance, deps: { core: Core }):
     if (!part) return reply.status(400).send({ error: 'multipart file field required' });
     const buf: Buffer = await part.toBuffer();
     if (buf.length === 0) return reply.status(400).send({ error: 'empty file' });
-    const png = await sharp(buf).png().toBuffer(); // normalize any input format
+    // .rotate() with no argument bakes in EXIF orientation, and it has to come
+    // before .png(), which drops the tag. Without it a photo taken in portrait
+    // on a phone is stored in its sensor orientation and lies on its side for
+    // the rest of its life, because nothing downstream can recover the tag.
+    // catalogImport does it in this order for the same reason.
+    const png = await sharp(buf).rotate().png().toBuffer(); // normalize any input format
     return { hash: core.images.save(png) };
   });
 

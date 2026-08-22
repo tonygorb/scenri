@@ -443,6 +443,11 @@ describe('golden: presenter references are identity, not wardrobe', () => {
     expect(r.prompt).toMatch(/capture conditions, not styling direction/i);
     // the preserve-wholesale wording is what leaked the uniform; it must not return
     expect(r.prompt).not.toMatch(/do not restyle them/);
+    // Releasing the uniform was not enough on its own: a 12 frame battery put
+    // the capture layer back in four. The directive has to name that failure
+    // and say what to wear when the direction says nothing.
+    expect(r.prompt).toMatch(/never return them to the plain base layers they were photographed in/i);
+    expect(r.prompt).toMatch(/dress them for the place and the occasion/i);
   });
 
   it('the release clause rides with a person, never with a product alone', () => {

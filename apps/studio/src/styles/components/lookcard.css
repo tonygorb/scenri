@@ -264,9 +264,32 @@
   opacity: 1;
   transform: none;
 }
+/* Waiting reads as one thing everywhere: the same gold sweep the feed uses
+   while a shot renders, rather than a second, deader loading vocabulary of
+   static grey blocks on the first screen of the app. */
 .sc-lookcard[data-variant="skeleton"] {
   background: var(--sc-raised);
   aspect-ratio: 4 / 5;
+  position: relative;
+  overflow: hidden;
+}
+.sc-lookcard[data-variant="skeleton"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, var(--sc-gold) 14%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: sc-shimmer 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-lookcard[data-variant="skeleton"]::after {
+    animation: none;
+  }
 }
 
 /* Touch: title footer under image; Use appears on first tap (hover substitute).

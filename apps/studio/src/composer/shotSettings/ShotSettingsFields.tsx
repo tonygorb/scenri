@@ -107,7 +107,17 @@ export function ShotSettingsFields({
           changed, and the result could not have been affected. The same is true
           on an engine that keeps the ratio and drops the pixels. */}
       {mode === 'generation' && sizing !== 'ratio' && (
-        <Field label="Resolution">
+        <Field
+          label="Resolution"
+          // An advisory engine renders at its own size and is asked, in words,
+          // to deliver this one. Printing "1536 px" as a flat fact there states
+          // a promise the engine never made, so it says what it actually is.
+          note={
+            sizing === 'advisory'
+              ? 'This engine renders at its own size, so this is a request rather than a guarantee.'
+              : undefined
+          }
+        >
           <Choices
             label="Resolution"
             className="sc-seg"
@@ -121,7 +131,11 @@ export function ShotSettingsFields({
                 id={r.id}
                 className="sc-seg-o"
                 on={r.id === quality}
-                label={`${r.label}, ${r.edge} px, ${r.note}`}
+                label={
+                  sizing === 'advisory'
+                    ? `${r.label}, asks for ${r.edge} px, ${r.note}`
+                    : `${r.label}, ${r.edge} px, ${r.note}`
+                }
                 onPick={() => onQuality(r.id)}
               >
                 {r.label}

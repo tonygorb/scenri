@@ -1,7 +1,10 @@
 import type { EngineCapabilities, Core } from '@scenri/core';
 import { composePrompt, type Scene } from './scenes.js';
+import type { EditScope } from './editScopeRules.js';
 export {
   brandRuleDirectives,
+  editPreservationDirective,
+  inheritedIdentityDirective,
   markLabel,
   productFidelityDirective,
   sceneGuardDirectives,
@@ -9,6 +12,8 @@ export {
 } from './briefDirectives.js';
 import {
   brandRuleDirectives,
+  editPreservationDirective,
+  inheritedIdentityDirective,
   markLabel,
   productFidelityDirective,
   sceneGuardDirectives,
@@ -112,6 +117,17 @@ interface CompileContext {
   template?: Scene;
   /** Lookup for inline scene tokens, which compile where they sit. */
   templateById?: (id: string) => Scene | undefined;
+  /**
+   * Refinements compile through this same function, and they need one thing a
+   * generation must never carry: a statement that a photograph already exists
+   * and most of it has to survive. Absent means generation, so every compiled
+   * generation prompt stays byte for byte what it was.
+   */
+  mode?: 'generation' | 'edit';
+  /** How much of the frame the instruction is allowed to move. See editScopeRules. */
+  editScope?: EditScope;
+  /** True when identity references were inherited from the shot being refined. */
+  inheritedIdentity?: boolean;
 }
 
 const assetHash = (ref: unknown): string | null => {
@@ -286,10 +302,16 @@ export function compileBrief(brief: Brief, ctx: CompileContext): CompiledBrief {
           // full-length in the same neutral off-white uniform; the old wording
           // ("do not restyle them") read as preserve-the-photo-wholesale, and
           // that uniform kept walking into finished commercial images.
+          // The release was still not enough on its own. In a 12 frame
+          // presenter battery the capture layer came back in four of them, so
+          // the last clause names the failure instead of only describing what
+          // the reference is, and says what to do when the direction is silent
+          // rather than leaving the model to fall back on the photograph.
           personDirectives.push(
             'The attached person reference is the same person every time: match their face, facial structure, skin, hair and build exactly. ' +
               'Their outfit, pose, background and lighting are neutral studio capture conditions, not styling direction: ' +
-              'dress and style them for this shot, to a commercial standard, following any wardrobe the direction itself specifies.',
+              'dress and style them for this shot, to a commercial standard, following any wardrobe the direction itself specifies. ' +
+              'Where the direction specifies none, dress them for the place and the occasion the frame shows, and never return them to the plain base layers they were photographed in.',
           );
           // Presenters carry the same kind of identity metadata products do
           // (identityNotes / negativeConstraints). It used to be dropped on
@@ -437,6 +459,18 @@ export function compileBrief(brief: Brief, ctx: CompileContext): CompiledBrief {
   // guards — the right neighbourhood, since a guard is the other thing here
   // whose whole job is to overrule what came before it.
   const brandLines = brandRuleDirectives(ctx.brand);
+  // A refinement says what may not move, and it says it last. The scene guards
+  // are the other thing here whose whole job is to overrule what came before
+  // them, and preservation has to overrule even those: a guard tells the model
+  // to disregard a product the scene named, while this tells it the picture in
+  // its hands is the shot.
+  const preservation =
+    ctx.mode === 'edit'
+      ? [
+          editPreservationDirective(ctx.editScope ?? 'global'),
+          ...(ctx.inheritedIdentity ? [inheritedIdentityDirective()] : []),
+        ]
+      : [];
   const allDirectives = [
     ...productDirectives,
     ...personDirectives,
@@ -445,6 +479,7 @@ export function compileBrief(brief: Brief, ctx: CompileContext): CompiledBrief {
     ...cameraDirectives,
     ...brandLines,
     ...guard,
+    ...preservation,
   ];
   if (allDirectives.length) prompt = `${prompt}${prompt.endsWith('.') ? '' : '.'} ${dedupe(allDirectives).join(' ')}`;
 

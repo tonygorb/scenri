@@ -353,21 +353,19 @@ export function DetailOverlay({
             engineName={engine?.displayName}
           />
           {node.status === 'done' && node.images.length > 1 && (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="sc-thumbs">
               {node.images.map((h, i) => (
                 <button
                   type="button"
                   key={h}
+                  className="sc-thumb-btn"
                   onClick={() => onImageIndex(i)}
                   aria-label={`Image ${i + 1}`}
-                  style={{
-                    padding: 0,
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    lineHeight: 0,
-                  }}
+                  aria-pressed={i === imageIndex}
                 >
+                  {/* the attributes stay as the pre-load intrinsic hint; the box
+                      and the crop are the stylesheet's job, and were nobody's
+                      until this rail stretched every portrait take it held */}
                   <img
                     src={imgUrl(h)}
                     alt=""

@@ -353,6 +353,104 @@ describe('generation flow', () => {
     expect(tree.json().nodes).toHaveLength(3);
   });
 
+  // A refinement used to compile to a bare sentence: no product reference, no
+  // presenter reference, and so none of the fidelity language keyed on them.
+  // The product in the picture had nothing to be held to.
+  describe('a refinement keeps the shot it refines', () => {
+    const briefWithProduct = () => ({
+      tokens: [
+        { t: 'format', id: 'square', w: 1024, h: 1024 },
+        { t: 'product', id: 'p1' },
+        { t: 'text', v: 'on a stone ledge' },
+      ],
+    });
+
+    const seedBrand = async () => {
+      const hash = core.images.save(PNG_1PX);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/brands',
+        payload: {
+          brand: {
+            specVersion: '0.1',
+            meta: { name: 'Acme' },
+            palette: { primary: { hex: '#1F3D2B' } },
+            products: [
+              { id: 'p1', name: 'House Blend', shots: [{ file: `asset:${hash}`, angle: 'front', locked: true }] },
+            ],
+          },
+        },
+      });
+      return { brand: res.json(), hash };
+    };
+
+    it('borrows the parent shot identity and says what must not move', async () => {
+      const { brand } = await seedBrand();
+      const { project } = await mkProject(brand.id);
+      const gen = await app.inject({
+        method: 'POST',
+        url: '/api/nodes',
+        payload: { projectId: project.id, kind: 'generation', engineId: 'demo', brief: briefWithProduct() },
+      });
+      const genNode = await waitDone(gen.json().id);
+
+      const edit = await app.inject({
+        method: 'POST',
+        url: '/api/nodes',
+        payload: {
+          projectId: project.id,
+          parentId: genNode.id,
+          kind: 'edit',
+          engineId: 'demo',
+          sourceImage: genNode.images[0],
+          brief: { tokens: [{ t: 'text', v: 'remove the cup on the left' }] },
+        },
+      });
+      expect(edit.statusCode).toBe(202);
+      const editNode = await waitDone(edit.json().id);
+
+      // The instruction still reads as the user wrote it, and the preservation
+      // clause is there to say the picture in hand is the shot.
+      expect(editNode.prompt).toContain('remove the cup on the left');
+      expect(editNode.prompt).toContain('This is a change to a photograph that already exists');
+      expect(editNode.prompt).toContain('Change only what was asked for');
+      // Identity came along, and it is named as identity rather than as a
+      // reason to build a new composition.
+      expect(editNode.prompt).toContain('the same product and the same person that are already in this picture');
+      // And the product name is not prepended onto the instruction.
+      expect(editNode.prompt.indexOf('remove the cup')).toBeLessThan(
+        editNode.prompt.indexOf('This is a change to a photograph'),
+      );
+    });
+
+    it('tells a whole frame change that it may move the frame, and a local one that it may not', async () => {
+      const { brand } = await seedBrand();
+      const { project } = await mkProject(brand.id);
+      const gen = await app.inject({
+        method: 'POST',
+        url: '/api/nodes',
+        payload: { projectId: project.id, kind: 'generation', engineId: 'demo', brief: briefWithProduct() },
+      });
+      const genNode = await waitDone(gen.json().id);
+
+      const global = await app.inject({
+        method: 'POST',
+        url: '/api/nodes',
+        payload: {
+          projectId: project.id,
+          parentId: genNode.id,
+          kind: 'edit',
+          engineId: 'demo',
+          sourceImage: genNode.images[0],
+          brief: { tokens: [{ t: 'text', v: 'make it nighttime' }] },
+        },
+      });
+      const globalNode = await waitDone(global.json().id);
+      expect(globalNode.prompt).toContain('Apply the instruction to the image you were given');
+      expect(globalNode.prompt).not.toContain('Change only what was asked for');
+    });
+  });
+
   it('edit without parent image -> 400; unknown engine -> 400', async () => {
     const brand = await mkBrand();
     const { project, root } = await mkProject(brand.id);
@@ -637,6 +735,40 @@ describe('diff + export + settings', () => {
       payload: fieldsOnly,
     });
     expect(bad.statusCode).toBe(400);
+  });
+
+  // A phone stores a portrait photo in its sensor orientation and records the
+  // turn in an EXIF tag. Encoding straight to PNG drops that tag, so without
+  // applying it first the picture lies on its side forever and nothing
+  // downstream can tell that it should not.
+  it('bakes in EXIF orientation on upload, so a phone photo is not stored sideways', async () => {
+    const sharp = (await import('sharp')).default;
+    // 40 wide by 20 tall, tagged "rotate 90" — upright it is 20 by 40.
+    const sideways = await sharp({
+      create: { width: 40, height: 20, channels: 3, background: { r: 200, g: 40, b: 40 } },
+    })
+      .withMetadata({ orientation: 6 })
+      .jpeg()
+      .toBuffer();
+
+    const boundary = '----scexif';
+    const payload = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="phone.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`,
+      ),
+      sideways,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const up = await app.inject({
+      method: 'POST',
+      url: '/api/images',
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload,
+    });
+    expect(up.statusCode).toBe(200);
+
+    const stored = await sharp(core.images.read(up.json().hash)).metadata();
+    expect({ width: stored.width, height: stored.height }).toEqual({ width: 20, height: 40 });
   });
 
   it('activity: every project in the brand, named, root excluded', async () => {

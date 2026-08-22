@@ -18,6 +18,7 @@
  * the token source, its two [data-theme] blocks drive theming, and its textual
  * structure is parsed by scripts/capture-mockups.mjs.
  */
+@import "./foundations/base.css";
 @import "./foundations/typography.css";
 @import "./foundations/shells.css";
 @import "./components/topbar.css";

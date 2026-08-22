@@ -112,15 +112,34 @@ export function createCodexEngine(opts: CodexEngineOptions): EngineAdapter {
           }),
       );
       const results: string[][] = new Array(count);
+      const failures: unknown[] = [];
       let next = 0;
       const workers = Array.from({ length: Math.min(3, count) }, async () => {
         while (next < count) {
           const i = next++;
-          results[i] = await jobs[i]();
+          try {
+            results[i] = await jobs[i]();
+          } catch (err) {
+            // One variant failing used to reject the batch, so three finished
+            // images were thrown away and left orphaned in the content store.
+            // A cancel still has to propagate: the user asked for the stop.
+            if (signal?.aborted) throw err;
+            results[i] = [];
+            failures.push(err);
+          }
         }
       });
       await Promise.all(workers);
-      return { images: results.flat(), costUsd: 0 };
+      const images = results.flat();
+      // Every variant failed, so there is nothing to keep and the reason the
+      // caller needs is the first one.
+      if (!images.length && failures.length) throw failures[0];
+      if (failures.length) {
+        console.warn(
+          `codex: ${failures.length} of ${count} variants failed, keeping ${images.length}: ${String((failures[0] as Error)?.message ?? failures[0])}`,
+        );
+      }
+      return { images, costUsd: 0 };
     },
 
     async edit(req: EditRequest, signal?: AbortSignal): Promise<EngineResult> {
@@ -134,7 +153,10 @@ export function createCodexEngine(opts: CodexEngineOptions): EngineAdapter {
         const editRoles = req.referenceRoles ?? [];
         const refLines: string[] = [];
         for (let i = 0; i < editRefs.length; i++) {
-          const role = editRoles[i] ?? 'product';
+          // An unnamed reference is not a product. Defaulting to one told the
+          // model to preserve the "label, shape and design" of whatever it was,
+          // which is the mistake the role system exists to prevent.
+          const role = editRoles[i] ?? 'reference';
           const name = `${role}-${i + 1}.png`;
           await copyFile(editRefs[i], join(dir, name));
           refLines.push(`${name} shows ${EDIT_REFERENCE_ROLE_DIRECTIVE[role]}`);
@@ -144,7 +166,15 @@ export function createCodexEngine(opts: CodexEngineOptions): EngineAdapter {
           (refLines.length ? ` ${refLines.join('. ')}.` : '') +
           ` Do not browse the web or explore files. Save the result in the current directory as out-1.png ` +
           `(you may run the commands needed to save and resize it). Nothing else.`;
-        await runCodex(execArgs(dir, promptText), signal);
+        // Hand the pictures over the same way generate does. The edit path only
+        // copied them into the working directory and named them in prose, so
+        // whether the model ever looked at the source depended on the skill
+        // going and finding the file. The source leads, because it is the shot.
+        const args = execArgs(dir, promptText);
+        for (const name of ['input.png', ...refLines.map((_, i) => `${editRoles[i] ?? 'reference'}-${i + 1}.png`)]) {
+          args.splice(args.length - 1, 0, `--image=${join(dir, name)}`);
+        }
+        await runCodex(args, signal);
         const images = await collectImages(dir);
         return { images, costUsd: 0 };
       });

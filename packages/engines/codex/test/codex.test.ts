@@ -275,7 +275,10 @@ describe('generate', () => {
     expect(promptText).not.toContain('the exact product');
   });
 
-  it('rejects the whole batch when one parallel run fails', async () => {
+  // The batch used to reject when one parallel run failed, which threw away
+  // pictures that were already saved in the content store. The images that did
+  // arrive are the user's; only a run that produced nothing is a failure.
+  it('keeps the images that arrived when one parallel run fails', async () => {
     let n = 0;
     const { spawnImpl } = fakeSpawn(({ args, child }) => {
       if (n++ === 0) {
@@ -287,7 +290,9 @@ describe('generate', () => {
       }
     });
     const engine = createCodexEngine({ platform: 'linux', saveImage: newSaveImage(), spawnImpl });
-    await expect(engine.generate(genReq)).rejects.toThrow(/exited with code 1.*image tool unavailable/s);
+    const result = await engine.generate(genReq);
+    expect(result.images).toEqual(['hash-1']);
+    expect(result.costUsd).toBe(0);
   });
 
   it('throws a clear error when codex exits 0 without producing images', async () => {
@@ -305,6 +310,38 @@ describe('generate', () => {
     const engine = createCodexEngine({ platform: 'linux', saveImage, spawnImpl });
     await expect(engine.generate(genReq)).rejects.toThrow(/codex exited with code 3: not signed in/);
     expect(saveImage).not.toHaveBeenCalled();
+  });
+
+  // A four variant run that lost one image used to lose all four: the failed
+  // worker rejected the batch while the finished pictures were already in the
+  // content store, orphaned and unreachable.
+  it('keeps the variants that succeeded when one of them fails', async () => {
+    let n = 0;
+    const { spawnImpl } = fakeSpawn(({ args, child }) => {
+      if (n++ === 0) {
+        child.stderr.emit('data', Buffer.from('rate limited'));
+        child.emit('exit', 3, null);
+        return;
+      }
+      writeFileSync(join(dirFromArgs(args), 'out-1.png'), PNG_2);
+      child.emit('exit', 0, null);
+    });
+    const saveImage = newSaveImage();
+    const engine = createCodexEngine({ platform: 'linux', saveImage, spawnImpl });
+
+    const result = await engine.generate({ ...genReq, count: 3 });
+
+    expect(result.images).toHaveLength(2);
+    expect(result.costUsd).toBe(0);
+  });
+
+  it('still throws when every variant fails, so the node carries the reason', async () => {
+    const { spawnImpl } = fakeSpawn(({ child }) => {
+      child.stderr.emit('data', Buffer.from('not signed in'));
+      child.emit('exit', 3, null);
+    });
+    const engine = createCodexEngine({ platform: 'linux', saveImage: newSaveImage(), spawnImpl });
+    await expect(engine.generate({ ...genReq, count: 2 })).rejects.toThrow(/not signed in/);
   });
 
   it('kills the child and throws after timeoutMs when codex never exits', async () => {
@@ -341,7 +378,7 @@ describe('edit', () => {
     const { cmd, args } = calls[0];
     expect(cmd).toBe('codex');
     expect(args.slice(0, 4)).toEqual(['exec', '--skip-git-repo-check', '--sandbox', 'workspace-write']);
-    expect(args[args.indexOf('-C') + 2]).toBe(
+    expect(args[args.length - 1]).toBe(
       'Edit input.png using your image generation/editing tool: make the sky teal.' +
         ' Do not browse the web or explore files. Save the result in the current directory as out-1.png' +
         ' (you may run the commands needed to save and resize it). Nothing else.',
@@ -350,6 +387,62 @@ describe('edit', () => {
     expect(saveImage).toHaveBeenCalledTimes(1);
     expect(saveImage.mock.calls[0][0].equals(PNG_2)).toBe(true);
     expect(result).toEqual({ images: ['hash-1'], costUsd: 0 });
+  });
+
+  // The edit path used to only copy the source into the working directory and
+  // mention it in prose, so whether the model ever looked at the picture
+  // depended on the skill going and finding the file. Generate has always
+  // handed its references over with --image.
+  it('hands the source over as a real image input, source first', async () => {
+    const srcDir = mkdtempSync(join(tmpdir(), 'codex-test-src-'));
+    const sourceImage = join(srcDir, 'photo.png');
+    const ref = join(srcDir, 'ref.png');
+    writeFileSync(sourceImage, PNG_1);
+    writeFileSync(ref, PNG_2);
+
+    const { spawnImpl, calls } = fakeSpawn(({ args, child }) => {
+      writeFileSync(join(dirFromArgs(args), 'out-1.png'), PNG_2);
+      child.emit('exit', 0, null);
+    });
+    const engine = createCodexEngine({ platform: 'linux', saveImage: newSaveImage(), spawnImpl });
+
+    await engine.edit({
+      instruction: 'remove the cup',
+      sourceImage,
+      brand,
+      referenceImages: [ref],
+      referenceRoles: ['product'],
+    });
+
+    const images = calls[0].args.filter((a) => a.startsWith('--image='));
+    expect(images).toHaveLength(2);
+    expect(images[0]).toContain('input.png');
+    expect(images[1]).toContain('product-1.png');
+    // the prompt is still the positional tail
+    expect(calls[0].args[calls[0].args.length - 1]).toContain('Edit input.png');
+  });
+
+  // A reference that arrives without a role is not a product. Calling it one
+  // told the model to preserve the "label, shape and design" of a face.
+  it('describes an unroled reference as a reference, never as the product', async () => {
+    const srcDir = mkdtempSync(join(tmpdir(), 'codex-test-src-'));
+    const sourceImage = join(srcDir, 'photo.png');
+    const ref = join(srcDir, 'ref.png');
+    writeFileSync(sourceImage, PNG_1);
+    writeFileSync(ref, PNG_2);
+
+    const { spawnImpl, calls } = fakeSpawn(({ args, child }) => {
+      writeFileSync(join(dirFromArgs(args), 'out-1.png'), PNG_2);
+      child.emit('exit', 0, null);
+    });
+    const engine = createCodexEngine({ platform: 'linux', saveImage: newSaveImage(), spawnImpl });
+
+    await engine.edit({ instruction: 'warmer light', sourceImage, brand, referenceImages: [ref] });
+
+    const promptText = calls[0].args[calls[0].args.length - 1];
+    expect(promptText).toContain('reference-1.png');
+    expect(promptText).not.toContain('product-1.png');
+    expect(promptText).not.toContain('the exact product');
   });
 
   it('propagates a clear error when codex exits 0 without out-1.png', async () => {

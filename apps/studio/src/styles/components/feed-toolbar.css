@@ -351,8 +351,10 @@
     box-shadow: none;
   }
 }
+/* The brief already records the shape, so the placeholder holds it. 4/5 stays
+   as the fallback for the optimistic sending tile, which has no node yet. */
 .sc-cell[data-running] {
-  aspect-ratio: 4 / 5;
+  aspect-ratio: var(--sc-cell-ar, 4 / 5);
   cursor: default;
 }
 .sc-cell-tag {
@@ -416,9 +418,16 @@
 }
 /* a coarse pointer has no hover to reveal with, so it never hides */
 @media (pointer: coarse) {
-  .sc-cell-branch,
-  .sc-cell-archive {
+  .sc-cell-branch {
     opacity: 1;
+  }
+  /* Archive stays out of the row under a finger. Long press already opens a
+     menu with Archive in it, so a permanently pinned button is a second way to
+     reach the same thing, paid for in chrome over the photograph and in the
+     width the fact chips need: with it in the row, a phone tile cut off its own
+     variant count to make room. Refine has no such second route, so it stays. */
+  .sc-cell-archive {
+    display: none;
   }
 }
 
@@ -453,6 +462,20 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
+}
+/* What to do with the picture, gathered into one group at the end of the row.
+   Archive and Refine used to live in different coordinate systems, one pinned
+   to the top right corner and one inside this row, which is how a keeper star
+   and an archive button ended up negotiating for the same 24px. */
+.sc-cell-acts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  pointer-events: none;
+}
+.sc-cell-acts > * {
+  pointer-events: auto;
 }
 /* One chip. Provenance used to be a full-radius sans pill and the counts
    small-radius mono chips, which is two grammars for one kind of statement. */
@@ -640,10 +663,15 @@ button.sc-fact:hover {
   border-radius: var(--sc-radius-sm);
   object-fit: cover;
 }
-/* the stand-in while the version being refined is still rendering */
+/* the stand-in while the version being refined is still rendering.
+   position is load bearing: .sc-shimmer is absolutely positioned, and without
+   a containing block here it escaped to the fixed dock and swept the whole
+   composer instead of this 20px square */
 .sc-target-thumb {
   display: inline-block;
   flex: none;
+  position: relative;
+  overflow: hidden;
 }
 .sc-target-lb b {
   color: var(--sc-fg);

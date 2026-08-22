@@ -262,6 +262,32 @@
   width: 100%;
   display: block;
 }
+/* The one moment the app has no cached copy of a picture is the shot that just
+   finished. The wrapper keeps the brief's shape and shimmers underneath until
+   the pixels decode, so the reveal is a fade rather than a blank tile that
+   snaps. */
+.sc-cellimg {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--sc-cell-ar, auto);
+  overflow: hidden;
+}
+.sc-cellimg img {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.sc-cellimg[data-loaded] img {
+  opacity: 1;
+}
+.sc-cellimg[data-loaded] {
+  aspect-ratio: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-cellimg img {
+    transition: none;
+  }
+}
 .sc-cell:hover {
   border-color: var(--sc-line-strong);
 }
@@ -272,32 +298,20 @@
   outline: var(--sc-ring-w) solid var(--sc-focus);
   outline-offset: -2px;
 }
-.sc-cell-meta {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 22px 10px 8px;
-  font-size: 11.5px;
-  color: #fff;
-  text-align: left;
-  /* A joined list of every set a shot belongs to, with no cap — three sets
-     with ordinary names already overran the cell. */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.62));
-  opacity: 0;
-  transition: opacity 120ms ease;
-  pointer-events: none;
-}
-.sc-cell:hover .sc-cell-meta {
-  opacity: 1;
-}
+/* The keeper mark owns the top right corner on its own now, and it is a
+   toggle rather than a readout: it used to render only on a shot that was
+   already kept, so the tile could remove a keeper but never make one, while
+   the empty state told people to star a shot. Unkept it waits for hover or
+   focus; kept it stays lit, because that is a state and not an affordance.
+   The 28px box is the tap target the 14px glyph never had. */
 .sc-cell-star {
   position: absolute;
   top: 8px;
   right: 8px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
   border: none;
   padding: 0;
   background: none;
@@ -305,15 +319,23 @@
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
   cursor: pointer;
   line-height: 0;
-  transition: transform 120ms ease;
+  opacity: 0;
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+.sc-cell:hover .sc-cell-star,
+.sc-cell-star:focus-visible,
+.sc-cell-star[data-on] {
+  opacity: 1;
 }
 
-/* Same corner as the kept star, revealed on hover like Branch; steps aside to
-   34px when the star is also present (a kept tile) so neither one is covered. */
+/* Management, so it sits with the other management action in the bottom row
+   rather than competing with the keeper mark for the top right corner. It used
+   to step aside to 34px whenever the star was present, which only worked
+   because of the order the two were written in. */
 .sc-cell-archive {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  flex: none;
   width: 24px;
   height: 24px;
   display: grid;
@@ -339,9 +361,6 @@
 .sc-cell-archive:hover {
   color: var(--sc-fg);
   border-color: var(--sc-line-strong);
-}
-.sc-cell-archive:has(~ .sc-cell-star) {
-  right: 34px;
 }
 /* Not forced on under a finger any more. Long-press already opens a menu with
    Archive in it, so a button pinned to every tile at all times was a second
@@ -485,6 +504,24 @@
   .sc-cell-archive {
     width: 30px;
     height: 30px;
+  }
+  /* Under a finger the keeper mark reads as state and nothing else: shown when
+     the shot is kept, reached through the long-press menu when it is not, the
+     same stance the pick checkbox already takes. A star pinned to every tile at
+     all times is permanent chrome over the photographs, and hover cannot hide
+     it again on a phone. */
+  .sc-cell-star {
+    width: 30px;
+    height: 30px;
+    opacity: 0;
+  }
+  .sc-cell-star[data-on] {
+    opacity: 1;
+  }
+  /* The fact chips are read at arm's length and tapped: two of them do open
+     something. */
+  button.sc-fact {
+    min-height: 30px;
   }
 }
 

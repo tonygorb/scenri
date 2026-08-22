@@ -16,3 +16,15 @@ export const FORMATS = [
   { id: 'story', label: 'Story', hint: '9:16', w: 1080, h: 1920 },
   { id: 'landscape', label: 'Landscape', hint: '16:9', w: 1600, h: 900 },
 ];
+
+/**
+ * The shape a shot is going to be, from the format its brief recorded.
+ *
+ * A placeholder that guesses cannot hold the space the picture will need, and
+ * the feed reflows the moment the image lands. Square is the app's own default
+ * and the right guess for a brief written before formats were stored.
+ */
+export function aspectOfFormat(formatId: string | undefined): number {
+  const f = FORMATS.find((x) => x.id === formatId);
+  return f ? f.w / f.h : 1;
+}

@@ -5,6 +5,7 @@ import {
   ArrowCounterClockwise,
   Check,
   ClockCounterClockwise,
+  FolderSimple,
   PencilLine,
   Stack,
   Star,
@@ -16,6 +17,8 @@ import { FailureNote } from './Failure.js';
 import { elapsedSec } from '../tasks.js';
 import { masonryLayout, PHONE, useElementWidth, useViewportWidth } from './masonry.js';
 import { RunningTag } from './canvas/RunningTag.js';
+import { FeedImage } from './canvas/FeedImage.js';
+import { aspectOfFormat } from '../composer/formats.js';
 
 /**
  * The feed: every shot the current lens admits, as a masonry tile.
@@ -134,7 +137,15 @@ export function Canvas({
           // (React warned on it), and the same nested-interactive mistake this
           // pass already fixed for SceneCard and the kept-star badge. A sibling
           // now, matching that pattern.
-          <div key={n.id} className="sc-cell" data-running="true" data-fb-node={n.id}>
+          <div
+            key={n.id}
+            className="sc-cell"
+            data-running="true"
+            data-fb-node={n.id}
+            // the shape the brief asked for, so the picture lands in the space
+            // already held for it instead of resizing its column
+            style={{ '--sc-cell-ar': aspectOfFormat(n.brief?.format) } as CSSProperties}
+          >
             <button
               type="button"
               className="sc-cell-open"
@@ -277,6 +288,23 @@ export function Canvas({
               {versions} version{versions === 1 ? '' : 's'}
             </button>
           )}
+          {/* Where this shot is filed. It used to be a second absolutely
+              positioned band across the whole bottom edge, painted after this
+              row and therefore on top of it, which is why the set names ran
+              through the version count and under the Refine button. It is a
+              fact about the picture, so it belongs with the other facts.
+
+              A count rather than the names: set names are arbitrarily long, and
+              on a phone tile one of them pushed the variant count into an
+              ellipsis, which is the row cutting off a fact to make room for
+              another. The names are on the title. A tile is not a place to read
+              a list. */}
+          {inSets.length > 0 && (
+            <span className="sc-fact" title={inSets.map((s) => s.name).join(', ')}>
+              <FolderSimple size={11} />
+              {inSets.length} set{inSets.length === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
       );
 
@@ -287,20 +315,33 @@ export function Canvas({
        * own; the run's own actions stay on the first, because they act on
        * the run and four copies of one checkbox is not four choices.
        */
-      const runControlsWithoutRefine = (
-        <>
-          {picking && (
-            <button
-              type="button"
-              className="sc-cell-pick"
-              data-on={chosen || undefined}
-              aria-pressed={chosen}
-              aria-label={chosen ? 'Deselect shot' : 'Select shot'}
-              onClick={() => onPick?.(n.id)}
-            >
-              {chosen && <Check size={12} weight="bold" />}
-            </button>
-          )}
+      const runControlsWithoutRefine = picking && (
+        <button
+          type="button"
+          className="sc-cell-pick"
+          data-on={chosen || undefined}
+          aria-pressed={chosen}
+          aria-label={chosen ? 'Deselect shot' : 'Select shot'}
+          onClick={() => onPick?.(n.id)}
+        >
+          {chosen && <Check size={12} weight="bold" />}
+        </button>
+      );
+
+      /**
+       * What to do with this picture, as one group in one corner.
+       *
+       * Archive used to sit in the top right and step aside to 34px whenever the
+       * keeper star was there too, which only worked because of the order the
+       * two happened to be written in. They are different kinds of thing: the
+       * star is a judgement about the work and stays visible, archive is
+       * management and belongs with the other management action.
+       */
+      const cellActions = (
+        // keyed only to settle the iterable check, exactly as `facts` is: this
+        // is built inside the callback that returns the tile array, but it is
+        // not a member of it
+        <div className="sc-cell-acts" key={`${n.id}-acts`}>
           {onArchive && (
             <button
               type="button"
@@ -312,7 +353,30 @@ export function Canvas({
               {n.archived ? <ArrowCounterClockwise size={12} /> : <Archive size={12} />}
             </button>
           )}
-        </>
+          {refineRun}
+        </div>
+      );
+
+      /**
+       * The keeper mark, which is now a mark you can make.
+       *
+       * It rendered only when the shot was already kept, with aria-pressed
+       * hardcoded true, so from the tile face a keeper could only ever be
+       * removed. Meanwhile the empty state told people to star a shot, which was
+       * the one thing this control could not do.
+       */
+      const keepStar = onToggleKeep && (
+        <button
+          type="button"
+          className="sc-cell-star"
+          data-on={n.kept || undefined}
+          onClick={() => onToggleKeep(n)}
+          aria-pressed={n.kept}
+          aria-label={n.kept ? 'Remove from keepers' : 'Keep'}
+          title={n.kept ? 'Remove from keepers' : 'Keep'}
+        >
+          <Star size={14} weight={n.kept ? 'fill' : 'regular'} />
+        </button>
       );
 
       if (expanded?.has(n.id) && n.images.length > 1) {
@@ -336,7 +400,7 @@ export function Canvas({
               aria-label={`Open ${nodeLabel(n)}, take ${i + 1} of ${n.images.length}`}
               onClick={() => onOpen(n.id, i)}
             >
-              <img src={imgUrl(hash)} alt="" loading="lazy" />
+              <FeedImage src={imgUrl(hash)} aspect={aspectOfFormat(n.brief?.format)} />
             </button>
             {/* An opened-out take gets the same bottom line as any other tile:
                 what it is on the left, what to do with it on the right. It used
@@ -367,25 +431,40 @@ export function Canvas({
                   controls. Without this the takes you opened out to compare
                   were inert: you could look at variant three and then only ever
                   refine variant one. */}
-              {onBranch && (
-                <button
-                  type="button"
-                  className="sc-cell-branch"
-                  data-on={branchingFrom === n.id && branchingFromImage === hash ? '' : undefined}
-                  onClick={() => onBranch(n.id, i)}
-                  aria-label={`Refine ${i + 1} of ${n.images.length}`}
-                  title="Continue from this take"
-                >
-                  <PencilLine size={12} />
-                  <span className="sc-cell-branch-lb">Refine</span>
-                </button>
-              )}
+              <div className="sc-cell-acts">
+                {i === 0 && onArchive && (
+                  <button
+                    type="button"
+                    className="sc-cell-archive"
+                    onClick={() => onArchive(n)}
+                    aria-label={n.archived ? 'Restore' : 'Archive'}
+                    title={n.archived ? 'Restore' : 'Archive'}
+                  >
+                    {n.archived ? <ArrowCounterClockwise size={12} /> : <Archive size={12} />}
+                  </button>
+                )}
+                {onBranch && (
+                  <button
+                    type="button"
+                    className="sc-cell-branch"
+                    data-on={branchingFrom === n.id && branchingFromImage === hash ? '' : undefined}
+                    onClick={() => onBranch(n.id, i)}
+                    aria-label={`Refine ${i + 1} of ${n.images.length}`}
+                    title="Continue from this take"
+                  >
+                    <PencilLine size={12} />
+                    <span className="sc-cell-branch-lb">Refine</span>
+                  </button>
+                )}
+              </div>
             </div>
             {i === 0 && (
               <>
                 {/* the run's own controls, without its Refine: every take now
-                    carries one that names the picture it is about */}
+                    carries one that names the picture it is about. The keeper
+                    mark comes too, because opening a run out used to lose it. */}
                 {runControlsWithoutRefine}
+                {keepStar}
               </>
             )}
           </div>
@@ -407,27 +486,14 @@ export function Canvas({
                 aria-label={`Open ${nodeLabel(n)}`}
                 onClick={() => onOpen(n.id)}
               >
-                <img src={imgUrl(n.images[0])} alt="" loading="lazy" />
+                <FeedImage src={imgUrl(n.images[0])} aspect={aspectOfFormat(n.brief?.format)} />
               </button>
               <div className="sc-cell-bar">
                 {facts}
-                {refineRun}
+                {cellActions}
               </div>
               {runControlsWithoutRefine}
-              {n.kept && (
-                <button
-                  type="button"
-                  className="sc-cell-star"
-                  onClick={() => onToggleKeep?.(n)}
-                  aria-pressed="true"
-                  aria-label="Remove from keepers"
-                >
-                  <Star size={14} weight="fill" />
-                </button>
-              )}
-              {/* the variant count moved onto the stack control, which is the
-                    thing that now acts on it rather than merely reporting it */}
-              {inSets.length > 0 && <span className="sc-cell-meta">{inSets.map((s) => s.name).join(', ')}</span>}
+              {keepStar}
             </div>
           </ContextMenu.Trigger>
           <ContextMenu.Content>

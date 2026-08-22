@@ -45,6 +45,52 @@ export function productFidelityDirective(attached: number): string {
 }
 
 /**
+ * What a refinement is allowed to change.
+ *
+ * A refine used to reach the engine as a bare instruction beside a picture,
+ * with nothing anywhere saying that the picture was the point. "Add one subtle
+ * prop" is a complete scene brief to an image model, so it wrote a new scene:
+ * the prop arrived, and so did new lighting, new shadows and a new surface.
+ *
+ * Both variants name the dimensions that go wrong in practice rather than
+ * saying "keep everything", which a model reads as a mood. The local one also
+ * releases the shadows and reflections belonging to the change, because a new
+ * object that casts nothing is its own kind of wrong.
+ */
+export function editPreservationDirective(scope: 'local' | 'global'): string {
+  if (scope === 'local') {
+    return (
+      'This is a change to a photograph that already exists, not a new photograph. Return the same image with ' +
+      'one change made. Everything the instruction does not name comes back exactly as it is now: the same framing, ' +
+      'the same crop, the same camera position, the same subject placement and pose, the same lighting, the same ' +
+      'colours, the same background and the same dimensions. Do not re-render, re-stage, re-light or re-compose the ' +
+      'picture. Change only what was asked for, together with the shadows, reflections and contact points that move ' +
+      'with it.'
+    );
+  }
+  return (
+    'This is a change to a photograph that already exists, not a new photograph. Apply the instruction to the image ' +
+    'you were given and keep what it does not name: the same subject and the same face, the same product with the ' +
+    'same label, geometry and colour, and the same dimensions. Do not replace the subject and do not redesign the ' +
+    'product.'
+  );
+}
+
+/**
+ * Why the extra references are attached to a refinement.
+ *
+ * Without this the model has been handed the picture plus two more photographs
+ * of things already in it, which reads as an invitation to build a new
+ * composition out of all three.
+ */
+export function inheritedIdentityDirective(): string {
+  return (
+    'The extra attached references are the same product and the same person that are already in this picture. Use ' +
+    'them to hold that identity exact while you make the change, not as a reason to re-stage the shot.'
+  );
+}
+
+/**
  * Does the shot direction already decide the camera?
  *
  * Camera belongs to the shot; a Scene may only express a tendency. Rather than

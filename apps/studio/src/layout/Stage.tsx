@@ -1,20 +1,15 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Box, Flex, Text } from '@radix-ui/themes';
 import { imgUrl, type TreeNode } from '../api.js';
-import { FORMATS } from '../composer/BriefInput.js';
 import { describeCancelled, describeFailure } from '../failure.js';
 import { FailureNote } from './Failure.js';
 // one clock for the whole app: the canvas and the bell must not disagree
 import { elapsedSec, runningPhrase } from '../tasks.js';
+// the feed's running tiles hold the same shape, from the same source
+import { aspectOfFormat } from '../composer/formats.js';
 
-/**
- * The shape a shot is going to be, so its placeholder can hold exactly that.
- * Recorded on the brief since the composer started storing it; square is the
- * app's own default and the right guess for anything older.
- */
 function aspectOf(node: TreeNode): number {
-  const f = FORMATS.find((x) => x.id === node.brief?.format);
-  return f ? f.w / f.h : 1;
+  return aspectOfFormat(node.brief?.format);
 }
 
 export function StageFrame({
